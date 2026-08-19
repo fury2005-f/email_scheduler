@@ -1,18 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { Mail, ShieldCheck, Zap, Server, Lock, AlertCircle } from 'lucide-react';
+import { Mail, ShieldCheck, Zap, Server, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 
 export function LoginCard() {
-  const handleGoogleSignIn = () => {
-    // Attempt Google OAuth sign in; fallback gracefully if client ID unconfigured
-    signIn('google', { callbackUrl: '/' }).catch(() => {
-      signIn('credentials', { callbackUrl: '/' });
-    });
-  };
+  const [loading, setLoading] = useState(false);
 
-  const handleDevSignIn = () => {
-    signIn('credentials', { callbackUrl: '/' });
+  const handleSignIn = (provider: 'google' | 'credentials') => {
+    setLoading(true);
+    signIn(provider, { callbackUrl: '/' });
   };
 
   return (
@@ -43,11 +40,12 @@ export function LoginCard() {
           </div>
         </div>
 
-        {/* Auth Buttons */}
+        {/* Action Buttons */}
         <div className="space-y-3 pt-2">
           <button
-            onClick={handleGoogleSignIn}
-            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center space-x-3 group cursor-pointer"
+            onClick={() => handleSignIn('google')}
+            disabled={loading}
+            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center space-x-3 group cursor-pointer disabled:opacity-50"
           >
             <svg className="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24">
               <path
@@ -70,15 +68,17 @@ export function LoginCard() {
             <span>Sign in with Google OAuth</span>
           </button>
 
-          {/* Quick Dev Sign-in for immediate local testing */}
+          {/* Quick Direct Sign-in */}
           <button
-            onClick={handleDevSignIn}
-            className="w-full py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium text-xs transition-colors border border-gray-700 flex items-center justify-center space-x-2 cursor-pointer"
+            onClick={() => handleSignIn('credentials')}
+            disabled={loading}
+            className="w-full py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium text-xs transition-colors border border-gray-700 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
           >
-            <span>Quick Local Dev Sign-In</span>
+            <span>Instant Dashboard Sign-In</span>
+            <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
           </button>
 
-          <p className="text-[11px] text-center text-gray-500 flex items-center justify-center space-x-1 pt-1">
+          <p className="text-[11px] text-center text-gray-500 flex items-center justify-center space-x-1 pt-1 font-mono">
             <Lock className="w-3 h-3 text-gray-500" />
             <span>NextAuth Authenticated Session</span>
           </p>
