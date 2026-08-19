@@ -1,5 +1,5 @@
-import { redisClient } from '../lib/redis.js';
-import { env } from '../config/env.js';
+import { redisClient } from '../lib/redis';
+import { env } from '../config/env';
 
 export interface QuotaCheckResult {
   allowed: boolean;
@@ -18,62 +18,93 @@ function getHourWindowKey(senderEmail: string): { globalKey: string; senderKey: 
   const globalKey = `emails:counter:global:${hourWindowStr}`;
   const senderKey = `emails:counter:${senderEmail.toLowerCase()}:${hourWindowStr}`;
 
-  // Time remaining in current hour window in seconds
   const currentMinute = now.getUTCMinutes();
   const currentSecond = now.getUTCSeconds();
-  const currentMs = now.getUTCMilliseconds();
   
   const secondsLeftInHour = 3600 - (currentMinute * 60 + currentSecond);
-  const msLeftInHour = (secondsLeftInHour * 1000) - currentMs;
 
   return {
     globalKey,
     senderKey,
-    ttlSeconds: secondsLeftInHour + 60, // Add 1 minute buffer to TTL
+    ttlSeconds: secondsLeftInHour + 60,
   };
 }
+
+const ATOMIC_QUOTA_LUA_SCRIPT = `
+  local globalKey = KEYS[1]
+  local senderKey = KEYS[2]
+  local maxGlobal = tonumber(ARGV[1])
+  local maxSender = tonumber(ARGV[2])
+  local ttlSeconds = tonumber(ARGV[3])
+
+  local currentGlobal = tonumber(redis.call('get', globalKey) or "0")
+  local currentSender = tonumber(redis.call('get', senderKey) or "0")
+
+  if currentGlobal >= maxGlobal then
+    return {0, "global", currentGlobal}
+  end
+
+  if currentSender >= maxSender then
+    return {0, "sender", currentSender}
+  end
+
+  local newGlobal = redis.call('incr', globalKey)
+  if newGlobal == 1 then
+    redis.call('expire', globalKey, ttlSeconds)
+  end
+
+  local newSender = redis.call('incr', senderKey)
+  if newSender == 1 then
+    redis.call('expire', senderKey, ttlSeconds)
+  end
+
+  return {1, "ok", newGlobal}
+`;
 
 export async function checkAndReserveQuota(senderEmail: string): Promise<QuotaCheckResult> {
   const { globalKey, senderKey, ttlSeconds } = getHourWindowKey(senderEmail);
 
-  // Read current counts
-  const [globalCountStr, senderCountStr] = await Promise.all([
-    redisClient.get(globalKey),
-    redisClient.get(senderKey),
-  ]);
-
-  const globalCount = globalCountStr ? parseInt(globalCountStr, 10) : 0;
-  const senderCount = senderCountStr ? parseInt(senderCountStr, 10) : 0;
-
-  // Calculate ms until next hour window
   const now = new Date();
   const nextHour = new Date(now);
   nextHour.setUTCHours(now.getUTCHours() + 1, 0, 0, 0);
   const msUntilNextWindow = Math.max(1000, nextHour.getTime() - now.getTime());
 
-  if (globalCount >= env.MAX_EMAILS_PER_HOUR) {
+  try {
+    const result = (await redisClient.eval(
+      ATOMIC_QUOTA_LUA_SCRIPT,
+      2,
+      globalKey,
+      senderKey,
+      env.MAX_EMAILS_PER_HOUR,
+      env.MAX_EMAILS_PER_HOUR_PER_SENDER,
+      ttlSeconds
+    )) as [number, string, number?];
+
+    const [status, limitType, count] = result;
+
+    if (status === 1) {
+      return { allowed: true };
+    }
+
+    if (limitType === 'global') {
+      return {
+        allowed: false,
+        msUntilNextWindow,
+        reason: `Global hourly quota reached (${count || env.MAX_EMAILS_PER_HOUR}/${env.MAX_EMAILS_PER_HOUR})`,
+      };
+    }
+
     return {
       allowed: false,
       msUntilNextWindow,
-      reason: `Global hourly quota reached (${globalCount}/${env.MAX_EMAILS_PER_HOUR})`,
+      reason: `Per-sender hourly quota reached for ${senderEmail} (${count || env.MAX_EMAILS_PER_HOUR_PER_SENDER}/${env.MAX_EMAILS_PER_HOUR_PER_SENDER})`,
     };
-  }
-
-  if (senderCount >= env.MAX_EMAILS_PER_HOUR_PER_SENDER) {
+  } catch (err: any) {
+    console.error('[RateLimiter Lua Error]', err);
     return {
       allowed: false,
-      msUntilNextWindow,
-      reason: `Per-sender hourly quota reached for ${senderEmail} (${senderCount}/${env.MAX_EMAILS_PER_HOUR_PER_SENDER})`,
+      msUntilNextWindow: 5000,
+      reason: 'Rate limiter evaluation error',
     };
   }
-
-  // Atomically increment counters
-  const pipeline = redisClient.pipeline();
-  pipeline.incr(globalKey);
-  pipeline.expire(globalKey, ttlSeconds);
-  pipeline.incr(senderKey);
-  pipeline.expire(senderKey, ttlSeconds);
-  await pipeline.exec();
-
-  return { allowed: true };
 }

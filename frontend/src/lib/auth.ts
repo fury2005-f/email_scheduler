@@ -2,19 +2,22 @@ import { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
+const hasGoogleCredentials =
+  Boolean(process.env.GOOGLE_CLIENT_ID) && Boolean(process.env.GOOGLE_CLIENT_SECRET);
+
 export const authOptions: NextAuthOptions = {
   providers: [
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(hasGoogleCredentials
       ? [
           GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: process.env.GOOGLE_CLIENT_ID!,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
           }),
         ]
       : []),
-    // Secondary fallback for local dev iteration if Google OAuth Client ID is missing from .env
     CredentialsProvider({
-      name: 'Demo Admin Account',
+      id: 'credentials',
+      name: 'Local Dev Account',
       credentials: {
         email: { label: 'Email', type: 'email', placeholder: 'admin@reachinbox.ai' },
       },

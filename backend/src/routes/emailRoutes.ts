@@ -4,7 +4,7 @@ import {
   getScheduledEmails,
   getSentEmails,
   getStats,
-} from '../controllers/emailController.js';
+} from '../controllers/emailController';
 
 export const emailRouter = Router();
 

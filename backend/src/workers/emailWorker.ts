@@ -1,10 +1,10 @@
 import { Worker, Job } from 'bullmq';
-import { EMAIL_QUEUE_NAME } from '../services/queueService.js';
-import { redisConnectionOptions } from '../lib/redis.js';
-import { prisma } from '../lib/prisma.js';
-import { checkAndReserveQuota } from '../services/rateLimiterService.js';
-import { sendEmailViaEthereal } from '../services/etherealService.js';
-import { env } from '../config/env.js';
+import { EMAIL_QUEUE_NAME } from '../services/queueService';
+import { redisConnectionOptions } from '../lib/redis';
+import { prisma } from '../lib/prisma';
+import { checkAndReserveQuota } from '../services/rateLimiterService';
+import { sendEmailViaEthereal } from '../services/etherealService';
+import { env } from '../config/env';
 
 export async function reconcileStaleSendingJobs(): Promise<number> {
   const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
@@ -66,7 +66,6 @@ async function processEmailJob(job: Job<{ emailId: string }>): Promise<void> {
 
   if (!quota.allowed) {
     const baseDelay = quota.msUntilNextWindow || 60000;
-    // Add sequence-based slight offset to preserve strict FIFO ordering among batched jobs
     const sequenceOffset = Number(email.sequenceNumber % 1000n) * 50; 
     const totalReDelayMs = baseDelay + sequenceOffset;
 
@@ -74,7 +73,6 @@ async function processEmailJob(job: Job<{ emailId: string }>): Promise<void> {
       `[Worker Rate Limit] ${quota.reason}. Re-delaying email ${emailId} (recipient: ${email.recipient}) by ${Math.round(totalReDelayMs / 1000)}s`
     );
 
-    // Re-delay job in BullMQ without throwing an error / marking failed
     await job.moveToDelayed(Date.now() + totalReDelayMs, job.token);
     return;
   }
@@ -112,7 +110,6 @@ async function processEmailJob(job: Job<{ emailId: string }>): Promise<void> {
     const errorMessage = err?.message || 'SMTP transmission error';
     console.error(`[Worker Error] Failed to send email ${emailId} to ${email.recipient}: ${errorMessage}`);
 
-    // If max attempts reached, mark as FAILED in DB
     const maxAttempts = job.opts.attempts || 3;
     if (job.attemptsMade + 1 >= maxAttempts) {
       await prisma.email.update({
@@ -124,7 +121,7 @@ async function processEmailJob(job: Job<{ emailId: string }>): Promise<void> {
       });
     }
 
-    throw err; // Let BullMQ trigger retry backoff
+    throw err;
   }
 }
 

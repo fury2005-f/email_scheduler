@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import { env } from './config/env.js';
-import { emailRouter } from './routes/emailRoutes.js';
-import { getTransporter } from './services/etherealService.js';
-import { startEmailWorker, reconcileStaleSendingJobs } from './workers/emailWorker.js';
+import { env } from './config/env';
+import { emailRouter } from './routes/emailRoutes';
+import { getTransporter } from './services/etherealService';
+import { startEmailWorker, reconcileStaleSendingJobs } from './workers/emailWorker';
 
 const app = express();
 

@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { env } from '../config/env.js';
+import { env } from '../config/env';
 
 let transporter: nodemailer.Transporter | null = null;
 let currentEtherealUser: string | null = null;
@@ -22,7 +22,6 @@ export async function getTransporter(): Promise<nodemailer.Transporter> {
     return transporter;
   }
 
-  // Create a auto test account if credentials not provided
   console.log('[Ethereal] No explicit credentials provided. Creating test account...');
   const testAccount = await nodemailer.createTestAccount();
   currentEtherealUser = testAccount.user;
