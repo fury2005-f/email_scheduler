@@ -2,12 +2,21 @@ import { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
+const hasGoogleCredentials =
+  Boolean(process.env.GOOGLE_CLIENT_ID) &&
+  Boolean(process.env.GOOGLE_CLIENT_SECRET) &&
+  process.env.GOOGLE_CLIENT_ID !== 'unconfigured-google-client-id';
+
 export const authOptions: NextAuthOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || 'unconfigured-google-client-id',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'unconfigured-google-client-secret',
-    }),
+    ...(hasGoogleCredentials
+      ? [
+          GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID!,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          }),
+        ]
+      : []),
     CredentialsProvider({
       id: 'credentials',
       name: 'ReachInbox Admin Account',
